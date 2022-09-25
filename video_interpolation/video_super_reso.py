@@ -81,11 +81,15 @@ if __name__ == "__main__":
     if args.test_video is not None:
         # Create a VideoCapture object and read from input file
         cap = cv2.VideoCapture(args.test_video)
+        frame_count = int(cap.get(7))
+
         height, width = int(cap.get(4)), int(cap.get(3))
-        size_f = (width, height)
-        result = cv2.VideoWriter("sr_test_video.mp4", 
-                        cv2.VideoWriter_fourcc('m', 'p', '4', 'v'),
-                        20, size_f)
+        if args.stack_bicubic:
+            size_f = (2*width*cfg.scale, height*cfg.scale)
+        else:
+            size_f = (width*cfg.scale, height*cfg.scale)
+
+        result = cv2.VideoWriter("sr_test_video.avi", cv2.VideoWriter_fourcc(*'MP42'), 20, size_f)
 
         if height > H_LIM or width > W_LIM:
             raise Exception("Frame shape exceed limits")
@@ -96,26 +100,31 @@ if __name__ == "__main__":
         if (result.isOpened()==False):
             print("Error opening save video file")
 
+        i = 0
         # Read until video is completed
         while(cap.isOpened()):
         # Capture frame-by-frame
             ret, frame = cap.read()
-
-            if ret == False:
+            if ret == False and i!=frame_count:
+                cap.release()
+                result.release()
                 raise Exception("Video reading error")
+            elif ret == False:
+                break
 
             sr_frame = image_super_resolution(frame)*255
             if args.stack_bicubic:
                 bi_frame = cv2.resize(frame, (frame.shape[1]*cfg.scale, frame.shape[0]*cfg.scale), cv2.INTER_CUBIC).astype('float32')
                 sr_frame = np.hstack([bi_frame, sr_frame])
+            sr_frame = np.clip(sr_frame, 0, 255)
             sr_frame = sr_frame.astype('uint8')
             result.write(sr_frame)
+            i += 1
 
         # When everything done, release
         # the video capture object
         cap.release()
         result.release()
 
-        # Closes all the frames
-        cv2.destroyAllWindows()
+        print("Saved successfully")
 
